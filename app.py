@@ -765,8 +765,23 @@ def get_arrival_record(gestion_df, orden_compra):
     if gestion_df.empty:
         return None
     
-    record = gestion_df[gestion_df['Orden_de_compra'] == orden_compra]
-    return record.iloc[0] if not record.empty else None
+    # Ensure both sides are strings and strip whitespace
+    orden_compra_clean = str(orden_compra).strip()
+    
+    # Create a mask for exact string matching
+    mask = gestion_df['Orden_de_compra'].astype(str).str.strip() == orden_compra_clean
+    
+    # Filter the dataframe
+    matching_records = gestion_df[mask]
+    
+    if matching_records.empty:
+        # Debug: show what we're looking for vs what exists
+        available_orders = gestion_df['Orden_de_compra'].astype(str).str.strip().tolist()
+        st.error(f"No se encontró orden '{orden_compra_clean}' en registros de gestión.")
+        st.error(f"Órdenes disponibles: {available_orders}")
+        return None
+    
+    return matching_records.iloc[0]
 
 def save_arrival_to_sheets(arrival_data):
     """Save arrival data to Google Sheets - REPLACES SharePoint Excel save"""
@@ -802,16 +817,24 @@ def update_service_times(orden_compra, service_data):
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
         
         if gestion_df.empty:
+            st.error("No hay datos en la hoja de gestión.")
             return False
         
-        # Find the record to update
-        existing_record = get_arrival_record(gestion_df, orden_compra)
-        if existing_record is None:
-            st.error("No se encontró registro de llegada para esta orden.")
+        # Clean the orden_compra for matching
+        orden_compra_clean = str(orden_compra).strip()
+        
+        # Find the record to update with robust string matching
+        mask = gestion_df['Orden_de_compra'].astype(str).str.strip() == orden_compra_clean
+        matching_records = gestion_df[mask]
+        
+        if matching_records.empty:
+            st.error(f"No se encontró registro de llegada para la orden: '{orden_compra_clean}'")
+            available_orders = gestion_df['Orden_de_compra'].astype(str).str.strip().tolist()
+            st.error(f"Órdenes disponibles: {available_orders}")
             return False
         
         # Update service times using Google Sheets update function
-        return update_sheets_record(orden_compra, service_data)
+        return update_sheets_record(orden_compra_clean, service_data)
         
     except Exception as e:
         st.error(f"Error actualizando tiempos de atención: {str(e)}")
