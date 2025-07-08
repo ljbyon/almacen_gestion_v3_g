@@ -895,8 +895,36 @@ def main():
                 today_reservations['Orden_de_compra'].isin(pending_arrivals_orders)
             ].copy()
             
-            # Sort by Hora (time slot) ascending
-            pending_reservations = pending_reservations.sort_values('Hora')
+            # Extract first time from Hora column for proper sorting
+            def extract_first_time(hora_str):
+                """Extract the first time from hora string for sorting"""
+                try:
+                    hora_str = str(hora_str).strip()
+                    # If it contains comma, take the first part
+                    if ',' in hora_str:
+                        first_time = hora_str.split(',')[0].strip()
+                    else:
+                        first_time = hora_str
+                    
+                    # Remove seconds if present and convert to time for sorting
+                    if first_time.count(':') == 2:
+                        first_time = ':'.join(first_time.split(':')[:2])
+                    
+                    # Convert to time object for proper sorting
+                    from datetime import datetime
+                    return datetime.strptime(first_time, '%H:%M').time()
+                except:
+                    # Fallback: return a default time if parsing fails
+                    return datetime.strptime('23:59', '%H:%M').time()
+            
+            # Add a sort key column
+            pending_reservations['sort_time'] = pending_reservations['Hora'].apply(extract_first_time)
+            
+            # Sort by the time column ascending
+            pending_reservations = pending_reservations.sort_values('sort_time')
+            
+            # Remove the temporary sort column
+            pending_reservations = pending_reservations.drop('sort_time', axis=1)
             
             # Create display options: "Proveedor - Orden_de_compra"
             pending_arrivals_display = []
@@ -914,11 +942,26 @@ def main():
         if existing_arrivals_orders:
             # Get arrival records with hora_llegada for sorting
             existing_records = gestion_df[
-                gestion_df['Orden_de_compra'].isin(existing_arrivals_orders)
+                gestion_df['Orden_de_compra'].astype(str).str.strip().isin([str(x).strip() for x in existing_arrivals_orders])
             ].copy()
             
-            # Sort by hora_llegada ascending
-            existing_records = existing_records.sort_values('Hora_llegada')
+            # Convert Hora_llegada to datetime for proper sorting
+            def convert_to_datetime(datetime_str):
+                """Convert datetime string to datetime object for sorting"""
+                try:
+                    return parse_datetime_flexible(datetime_str)
+                except:
+                    # Fallback: return a very late time if parsing fails
+                    from datetime import datetime
+                    return datetime(2099, 12, 31, 23, 59, 59)
+            
+            existing_records['sort_datetime'] = existing_records['Hora_llegada'].apply(convert_to_datetime)
+            
+            # Sort by the datetime column ascending
+            existing_records = existing_records.sort_values('sort_datetime')
+            
+            # Remove the temporary sort column
+            existing_records = existing_records.drop('sort_datetime', axis=1)
             
             # Create display options: "Proveedor - Orden_de_compra"
             existing_arrivals_display = []
