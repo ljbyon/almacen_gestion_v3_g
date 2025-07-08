@@ -193,16 +193,24 @@ def download_sheets_to_memory():
             reservas_data = reservas_ws.get_all_records()
             if reservas_data:
                 reservas_df = pd.DataFrame(reservas_data)
+                # Ensure Orden_de_compra is string
+                if 'Orden_de_compra' in reservas_df.columns:
+                    reservas_df['Orden_de_compra'] = reservas_df['Orden_de_compra'].astype(str)
             else:
                 # Fallback to raw values
                 all_values = reservas_ws.get_all_values()
                 if all_values and len(all_values) > 1:
                     reservas_df = pd.DataFrame(all_values[1:], columns=all_values[0])
+                    # Ensure Orden_de_compra is string
+                    if 'Orden_de_compra' in reservas_df.columns:
+                        reservas_df['Orden_de_compra'] = reservas_df['Orden_de_compra'].astype(str)
                 else:
                     reservas_df = pd.DataFrame(columns=['Fecha', 'Hora', 'Proveedor', 'Numero_de_bultos', 'Orden_de_compra'])
         except gspread.WorksheetNotFound:
             reservas_df = pd.DataFrame(columns=['Fecha', 'Hora', 'Proveedor', 'Numero_de_bultos', 'Orden_de_compra'])
-        
+            
+
+
         # Load or create gestion sheet
         try:
             gestion_ws = spreadsheet.worksheet("proveedor_gestion")
@@ -677,7 +685,7 @@ def get_pending_arrivals(today_reservations, gestion_df):
         ~today_reservations['Orden_de_compra'].isin(processed_orders)
     ]
     
-    return sorted(pending['Orden_de_compra'].tolist())
+    return sorted(pending['Orden_de_compra'].astype(str).tolist())
 
 def get_arrival_record(gestion_df, orden_compra):
     """Get existing arrival record for an order"""
