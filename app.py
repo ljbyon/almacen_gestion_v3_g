@@ -313,13 +313,13 @@ def update_sheets_record(orden_compra, update_data):
         gestion_ws = spreadsheet.worksheet("proveedor_gestion")
         
         # Get all data to find the record
-        all_data = gestion_ws.get_all_records()
+        all_data = gestion_ws.get_all_values()
         
-        # Find the row to update
+        # Find the row to update (skip header row)
         target_row = None
-        for i, record in enumerate(all_data):
-            if record.get('Orden_de_compra') == orden_compra:
-                target_row = i + 2  # +2 because gspread uses 1-based indexing and skip header
+        for i, row in enumerate(all_data[1:], start=2):  # Start from row 2 (skip header)
+            if len(row) > 0 and str(row[0]).strip() == str(orden_compra).strip():
+                target_row = i
                 break
         
         if target_row is None:
@@ -339,11 +339,19 @@ def update_sheets_record(orden_compra, update_data):
             'hora_de_reserva': 'L'
         }
         
-        # Update cells one by one
+        # Update cells one by one with proper data handling
         for field, value in update_data.items():
             if field in col_mapping:
                 cell_address = f"{col_mapping[field]}{target_row}"
-                gestion_ws.update(cell_address, str(value) if value is not None else '')
+                
+                # Handle None values and ensure proper string conversion
+                if value is None or str(value).lower() in ['none', 'nan', '']:
+                    cell_value = ''
+                else:
+                    cell_value = str(value)
+                
+                # Update the cell
+                gestion_ws.update(cell_address, cell_value, value_input_option='RAW')
         
         # Clear cache after successful update
         download_sheets_to_memory.clear()
@@ -353,6 +361,7 @@ def update_sheets_record(orden_compra, update_data):
     except Exception as e:
         st.error(f"❌ Error actualizando registro en Google Sheets: {str(e)}")
         return False
+
 
 # ─────────────────────────────────────────────────────────────
 # 3. Helper Functions - UNCHANGED TIME PARSING AND CALCULATIONS
@@ -635,6 +644,11 @@ def get_existing_arrivals(gestion_df):
     today = datetime.now().strftime('%Y-%m-%d')
     if gestion_df.empty:
         return []
+
+    if 'Orden_de_compra' in gestion_df.columns:
+        gestion_df['Orden_de_compra'] = gestion_df['Orden_de_compra'].astype(str)
+ 
+
     
     # Filter records with arrival time from today
     today_arrivals = gestion_df[
@@ -649,7 +663,7 @@ def get_existing_arrivals(gestion_df):
         (today_arrivals['Hora_fin_atencion'].astype(str).isin(['', 'nan', 'None']))
     ]
     
-    return sorted(pending_service['Orden_de_compra'].tolist())
+    return sorted(pending_service['Orden_de_compra'].astype(str).tolist())
 
 def get_completed_orders(gestion_df):
     """Get orders that have both arrival and service registered today"""
@@ -670,7 +684,7 @@ def get_completed_orders(gestion_df):
         (~today_records['Hora_fin_atencion'].astype(str).isin(['', 'nan', 'None']))
     ]
     
-    return completed['Orden_de_compra'].tolist()
+    return completed['Orden_de_compra'].astype(str).tolist()
 
 def get_pending_arrivals(today_reservations, gestion_df):
     """Get orders that haven't registered arrival yet"""
