@@ -1189,11 +1189,11 @@ def main():
                             'Proveedor': order_details['Proveedor'],
                             'Numero_de_bultos': order_details['Numero_de_bultos'],
                             'Hora_llegada': format_datetime_no_zero_padding(arrival_datetime),  # EXACT FORMAT
-                            'Hora_inicio_atencion': None,
-                            'Hora_fin_atencion': None,
-                            'Tiempo_espera': None,
-                            'Tiempo_atencion': None,
-                            'Tiempo_total': None,
+                            'Hora_inicio_atencion': '',
+                            'Hora_fin_atencion': '',
+                            'Tiempo_espera': '',
+                            'Tiempo_atencion': '',
+                            'Tiempo_total': '',
                             'Tiempo_retraso': tiempo_retraso,
                             'numero_de_semana': arrival_datetime.isocalendar()[1],
                             'hora_de_reserva': hora_de_reserva
