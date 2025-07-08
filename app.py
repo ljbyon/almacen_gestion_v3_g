@@ -447,6 +447,38 @@ def format_datetime_no_zero_padding(dt):
     # Format with single digit hour when needed
     return f"{year}-{month:02d}-{day:02d} {hour}:{minute:02d}:{second:02d}"
 
+def parse_datetime_flexible(datetime_str):
+    """Parse datetime string that may have single or double digit hours"""
+    if not datetime_str or str(datetime_str).lower() in ['none', 'nan', '']:
+        return None
+    
+    datetime_str = str(datetime_str).strip()
+    
+    try:
+        # First try standard ISO format (with zero-padded hours)
+        return datetime.fromisoformat(datetime_str)
+    except ValueError:
+        try:
+            # Try parsing with single digit hours manually
+            # Format: "2025-07-08 9:00:00"
+            if ' ' in datetime_str and ':' in datetime_str:
+                date_part, time_part = datetime_str.split(' ', 1)
+                
+                # Parse date part
+                year, month, day = map(int, date_part.split('-'))
+                
+                # Parse time part
+                time_components = time_part.split(':')
+                hour = int(time_components[0])
+                minute = int(time_components[1]) if len(time_components) > 1 else 0
+                second = int(time_components[2]) if len(time_components) > 2 else 0
+                
+                return datetime(year, month, day, hour, minute, second)
+            else:
+                return None
+        except (ValueError, IndexError):
+            return None
+
 # ─────────────────────────────────────────────────────────────
 # 4. Dashboard Helper Functions - UNCHANGED
 # ─────────────────────────────────────────────────────────────
@@ -1108,7 +1140,7 @@ def main():
                         col1, col2 = st.columns(2)
                         
                         # Parse arrival time for defaults
-                        arrival_datetime = datetime.fromisoformat(str(arrival_record['Hora_llegada']))
+                        arrival_datetime = parse_datetime_flexible(str(arrival_record['Hora_llegada']))
                         # Ensure default hour is within service hours (9-18)
                         default_hour = max(9, min(18, arrival_datetime.hour))
                         default_minute = arrival_datetime.minute  # Use exact minute instead of rounding
@@ -1183,7 +1215,7 @@ def main():
                                 hora_fin = combine_date_time(today_date, end_time)
                                 
                                 # Parse arrival time
-                                arrival_datetime = datetime.fromisoformat(str(arrival_record['Hora_llegada']))
+                                arrival_datetime = parse_datetime_flexible(str(arrival_record['Hora_llegada']))
                                 
                                 # Validate times - UNCHANGED LOGIC
                                 if hora_inicio >= hora_fin:
@@ -1211,7 +1243,7 @@ def main():
                                             st.success("✅ Atención registrada exitosamente!")
                                             
                                             # Calculate delay for summary - UNCHANGED LOGIC
-                                            arrival_datetime = datetime.fromisoformat(str(arrival_record['Hora_llegada']))
+                                            arrival_datetime = parse_datetime_flexible(str(arrival_record['Hora_llegada']))
                                             
                                             # Get the booked time from reservas_df
                                             order_reserva = today_reservations[
