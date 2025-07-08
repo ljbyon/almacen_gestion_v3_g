@@ -864,11 +864,33 @@ def main():
     if not no_reservations_today:
         existing_arrivals = get_existing_arrivals(gestion_df)
         completed_orders = get_completed_orders(gestion_df)
-        pending_arrivals = get_pending_arrivals(today_reservations, gestion_df)
+        pending_arrivals_orders = get_pending_arrivals(today_reservations, gestion_df)
+        
+        # Create sorted pending arrivals with proveedor names
+        if pending_arrivals_orders:
+            pending_reservations = today_reservations[
+                today_reservations['Orden_de_compra'].isin(pending_arrivals_orders)
+            ].copy()
+            
+            # Sort by Hora (time slot) ascending
+            pending_reservations = pending_reservations.sort_values('Hora')
+            
+            # Create display options: "Proveedor - Orden_de_compra"
+            pending_arrivals_display = []
+            pending_arrivals_mapping = {}
+            
+            for _, row in pending_reservations.iterrows():
+                display_text = f"{row['Proveedor']} - {row['Orden_de_compra']}"
+                pending_arrivals_display.append(display_text)
+                pending_arrivals_mapping[display_text] = row['Orden_de_compra']
+        else:
+            pending_arrivals_display = []
+            pending_arrivals_mapping = {}
     else:
         existing_arrivals = []
         completed_orders = []
-        pending_arrivals = []
+        pending_arrivals_display = []
+        pending_arrivals_mapping = {}
     
     # ─────────────────────────────────────────────────────────────
     # TAB 1: Arrival Registration - UPDATED FOR GOOGLE SHEETS
