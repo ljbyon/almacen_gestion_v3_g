@@ -782,6 +782,24 @@ def get_arrival_record(gestion_df, orden_compra):
         return None
     
     return matching_records.iloc[0]
+def get_arrival_record_silent(gestion_df, orden_compra):
+    """Get existing arrival record for an order - silent version without error messages"""
+    if gestion_df.empty:
+        return None
+    
+    # Ensure both sides are strings and strip whitespace
+    orden_compra_clean = str(orden_compra).strip()
+    
+    # Create a mask for exact string matching
+    mask = gestion_df['Orden_de_compra'].astype(str).str.strip() == orden_compra_clean
+    
+    # Filter the dataframe
+    matching_records = gestion_df[mask]
+    
+    if matching_records.empty:
+        return None
+    
+    return matching_records.iloc[0]
 
 def save_arrival_to_sheets(arrival_data):
     """Save arrival data to Google Sheets - REPLACES SharePoint Excel save"""
@@ -792,7 +810,7 @@ def save_arrival_to_sheets(arrival_data):
             return False
         
         # Check if record already exists
-        existing_record = get_arrival_record(gestion_df, arrival_data['Orden_de_compra'])
+        existing_record = get_arrival_record_silent(gestion_df, arrival_data['Orden_de_compra'])
         
         if existing_record is not None:
             # Update existing record
