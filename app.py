@@ -1230,7 +1230,7 @@ def main():
                                     
                                     # Prepare service data - MAINTAIN EXACT DATE FORMAT
                                     service_data = {
-                                        'Hora_inicio_atencion': ormat_datetime_no_zero_padding(hora_inicio),
+                                        'Hora_inicio_atencion': format_datetime_no_zero_padding(hora_inicio),
                                         'Hora_fin_atencion': format_datetime_no_zero_padding(hora_fin),
                                         'Tiempo_espera': tiempo_espera,
                                         'Tiempo_atencion': tiempo_atencion,
