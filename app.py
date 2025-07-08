@@ -1294,10 +1294,7 @@ def main():
                         # Save service times button - only show when not registered
                         if st.button("Guardar Atención", type="primary", key="save_service"):
 
-                            # DEBUG: Show what orden_compra we're trying to update
-                            st.write(f"DEBUG - selected_display_tab2: '{selected_display_tab2}'")
-                            st.write(f"DEBUG - selected_order_tab2: '{selected_order_tab2}'")
-                            st.write(f"DEBUG - Available orders in gestion_df: {gestion_df['Orden_de_compra'].tolist()}")
+                            
                             if start_time and end_time:
                                 today_date = datetime.now().date()
                                 hora_inicio = combine_date_time(today_date, start_time)
