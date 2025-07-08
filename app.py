@@ -905,15 +905,18 @@ def main():
             
             with col1:
                 # Order selection - only show orders that haven't been processed
-                if not pending_arrivals:
+                if not pending_arrivals_display:
                     st.info("✅ Todas las llegadas del día han sido registradas")
                     selected_order_tab1 = None
+                    selected_display_tab1 = None
                 else:
-                    selected_order_tab1 = st.selectbox(
+                    selected_display_tab1 = st.selectbox(
                         "Orden de Compra:",
-                        options=pending_arrivals,
+                        options=pending_arrivals_display,
                         key="order_select_tab1"
                     )
+
+                selected_order_tab1 = pending_arrivals_mapping.get(selected_display_tab1)
                 
                 if selected_order_tab1:
                     # Get order details
@@ -995,7 +998,7 @@ def main():
                             options=working_hours,
                             index=hour_index,
                             format_func=lambda x: f"{x:02d}",
-                            key=f"arrival_hour_tab1_{selected_order_tab1}"
+                            key=f"arrival_hour_tab1_{selected_display_tab1}"
                         )
                     
                     with time_col2:
@@ -1004,7 +1007,7 @@ def main():
                             options=list(range(0, 60, 1)),  # 1-minute intervals
                             index=default_minute,  # Direct minute value as index
                             format_func=lambda x: f"{x:02d}",
-                            key=f"arrival_minute_tab1_{selected_order_tab1}"
+                            key=f"arrival_minute_tab1_{selected_display_tab1}"
                         )
                     
                     # Combine into time object
