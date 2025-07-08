@@ -312,46 +312,57 @@ def update_sheets_record(orden_compra, update_data):
         spreadsheet = gc.open(st.secrets["GOOGLE_SHEET_NAME"])
         gestion_ws = spreadsheet.worksheet("proveedor_gestion")
         
-        # Get all data to find the record
-        all_data = gestion_ws.get_all_values()
+        # Get all data
+        all_values = gestion_ws.get_all_values()
         
-        # Find the row to update (skip header row)
-        target_row = None
-        for i, row in enumerate(all_data[1:], start=2):  # Start from row 2 (skip header)
+        # Find the row to update
+        target_row_index = None
+        for i, row in enumerate(all_values[1:], start=1):  # Skip header, start counting from 1
             if len(row) > 0 and str(row[0]).strip() == str(orden_compra).strip():
-                target_row = i
+                target_row_index = i
                 break
         
-        if target_row is None:
+        if target_row_index is None:
             st.error("No se encontró el registro para actualizar")
             return False
         
-        # Update each field that's provided in update_data
+        # Get the current row data
+        current_row = all_values[target_row_index].copy()
+        
+        # Ensure row has enough columns (12 columns total)
+        while len(current_row) < 12:
+            current_row.append('')
+        
+        # Column mapping (0-based index)
         col_mapping = {
-            'Hora_llegada': 'D',
-            'Hora_inicio_atencion': 'E', 
-            'Hora_fin_atencion': 'F',
-            'Tiempo_espera': 'G',
-            'Tiempo_atencion': 'H',
-            'Tiempo_total': 'I',
-            'Tiempo_retraso': 'J',
-            'numero_de_semana': 'K',
-            'hora_de_reserva': 'L'
+            'Hora_llegada': 3,           # D = index 3
+            'Hora_inicio_atencion': 4,   # E = index 4
+            'Hora_fin_atencion': 5,      # F = index 5
+            'Tiempo_espera': 6,          # G = index 6
+            'Tiempo_atencion': 7,        # H = index 7
+            'Tiempo_total': 8,           # I = index 8
+            'Tiempo_retraso': 9,         # J = index 9
+            'numero_de_semana': 10,      # K = index 10
+            'hora_de_reserva': 11        # L = index 11
         }
         
-        # Update cells one by one with proper data handling
+        # Update the row data
         for field, value in update_data.items():
             if field in col_mapping:
-                cell_address = f"{col_mapping[field]}{target_row}"
+                col_index = col_mapping[field]
                 
                 # Handle None values and ensure proper string conversion
                 if value is None or str(value).lower() in ['none', 'nan', '']:
-                    cell_value = ''
+                    current_row[col_index] = ''
                 else:
-                    cell_value = str(value)
-                
-                # Update the cell
-                gestion_ws.update(cell_address, cell_value, value_input_option='RAW')
+                    current_row[col_index] = str(value)
+        
+        # Update the entire row (row numbers are 1-based for gspread)
+        row_number = target_row_index + 1  # Convert to 1-based
+        range_name = f"A{row_number}:L{row_number}"
+        
+        # Update the row
+        gestion_ws.update(range_name, [current_row], value_input_option='RAW')
         
         # Clear cache after successful update
         download_sheets_to_memory.clear()
@@ -361,7 +372,7 @@ def update_sheets_record(orden_compra, update_data):
     except Exception as e:
         st.error(f"❌ Error actualizando registro en Google Sheets: {str(e)}")
         return False
-
+        
 
 # ─────────────────────────────────────────────────────────────
 # 3. Helper Functions - UNCHANGED TIME PARSING AND CALCULATIONS
