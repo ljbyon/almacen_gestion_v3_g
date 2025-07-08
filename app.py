@@ -372,7 +372,7 @@ def update_sheets_record(orden_compra, update_data):
     except Exception as e:
         st.error(f"❌ Error actualizando registro en Google Sheets: {str(e)}")
         return False
-        
+
 
 # ─────────────────────────────────────────────────────────────
 # 3. Helper Functions - UNCHANGED TIME PARSING AND CALCULATIONS
@@ -430,6 +430,22 @@ def calculate_time_difference(start_datetime, end_datetime):
 def combine_date_time(date_part, time_part):
     """Combine date and time into datetime"""
     return datetime.combine(date_part, time_part)
+
+def format_datetime_no_zero_padding(dt):
+    """Format datetime with single digit hours (9:00:00 not 09:00:00)"""
+    if dt is None:
+        return None
+    
+    # Get components
+    year = dt.year
+    month = dt.month
+    day = dt.day
+    hour = dt.hour  # This will be single digit for 1-9
+    minute = dt.minute
+    second = dt.second
+    
+    # Format with single digit hour when needed
+    return f"{year}-{month:02d}-{day:02d} {hour}:{minute:02d}:{second:02d}"
 
 # ─────────────────────────────────────────────────────────────
 # 4. Dashboard Helper Functions - UNCHANGED
@@ -1005,7 +1021,7 @@ def main():
                             'Orden_de_compra': selected_order_tab1,
                             'Proveedor': order_details['Proveedor'],
                             'Numero_de_bultos': order_details['Numero_de_bultos'],
-                            'Hora_llegada': arrival_datetime.strftime('%Y-%m-%d %H:%M:%S'),  # EXACT FORMAT
+                            'Hora_llegada': format_datetime_no_zero_padding(arrival_datetime),  # EXACT FORMAT
                             'Hora_inicio_atencion': None,
                             'Hora_fin_atencion': None,
                             'Tiempo_espera': None,
@@ -1182,8 +1198,8 @@ def main():
                                     
                                     # Prepare service data - MAINTAIN EXACT DATE FORMAT
                                     service_data = {
-                                        'Hora_inicio_atencion': hora_inicio.strftime('%Y-%m-%d %H:%M:%S'),
-                                        'Hora_fin_atencion': hora_fin.strftime('%Y-%m-%d %H:%M:%S'),
+                                        'Hora_inicio_atencion': ormat_datetime_no_zero_padding(hora_inicio),
+                                        'Hora_fin_atencion': format_datetime_no_zero_padding(hora_fin),
                                         'Tiempo_espera': tiempo_espera,
                                         'Tiempo_atencion': tiempo_atencion,
                                         'Tiempo_total': tiempo_total
