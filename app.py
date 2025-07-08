@@ -862,7 +862,7 @@ def main():
     
     # Get order status (only if there are reservations)
     if not no_reservations_today:
-        existing_arrivals = get_existing_arrivals(gestion_df)
+        existing_arrivals_orders = get_existing_arrivals(gestion_df)
         completed_orders = get_completed_orders(gestion_df)
         pending_arrivals_orders = get_pending_arrivals(today_reservations, gestion_df)
         
@@ -886,11 +886,37 @@ def main():
         else:
             pending_arrivals_display = []
             pending_arrivals_mapping = {}
+        
+        # Create sorted existing arrivals with proveedor names (for TAB 2)
+        if existing_arrivals_orders:
+            # Get arrival records with hora_llegada for sorting
+            existing_records = gestion_df[
+                gestion_df['Orden_de_compra'].isin(existing_arrivals_orders)
+            ].copy()
+            
+            # Sort by hora_llegada ascending
+            existing_records = existing_records.sort_values('Hora_llegada')
+            
+            # Create display options: "Proveedor - Orden_de_compra"
+            existing_arrivals_display = []
+            existing_arrivals_mapping = {}
+            
+            for _, row in existing_records.iterrows():
+                display_text = f"{row['Proveedor']} - {row['Orden_de_compra']}"
+                existing_arrivals_display.append(display_text)
+                existing_arrivals_mapping[display_text] = row['Orden_de_compra']
+        else:
+            existing_arrivals_display = []
+            existing_arrivals_mapping = {}
     else:
         existing_arrivals = []
         completed_orders = []
         pending_arrivals_display = []
         pending_arrivals_mapping = {}
+        existing_arrivals_display = []
+        existing_arrivals_mapping = {}
+
+        
     
     # ─────────────────────────────────────────────────────────────
     # TAB 1: Arrival Registration - UPDATED FOR GOOGLE SHEETS
@@ -1119,14 +1145,24 @@ def main():
             st.warning("No hay reservas programadas para hoy.")
         else:
             # Order selection
-            selected_order_tab2 = st.selectbox(
-                "Orden de Compra:",
-                options=existing_arrivals if existing_arrivals else ["No hay llegadas registradas"],
-                disabled=not existing_arrivals,
-                key="order_select_tab2"
-            )
+            if existing_arrivals_display:
+                selected_display_tab2 = st.selectbox(
+                    "Orden de Compra:",
+                    options=existing_arrivals_display,
+                    key="order_select_tab2"
+                )
+                # Get the actual orden_de_compra from the mapping
+                selected_order_tab2 = existing_arrivals_mapping.get(selected_display_tab2)
+            else:
+                selected_display_tab2 = st.selectbox(
+                    "Orden de Compra:",
+                    options=["No hay llegadas registradas"],
+                    disabled=True,
+                    key="order_select_tab2"
+                )
+                selected_order_tab2 = None
             
-            if existing_arrivals and selected_order_tab2:
+            if existing_arrivals_display  and selected_order_tab2:
                 # Get arrival record
                 arrival_record = get_arrival_record(gestion_df, selected_order_tab2)
                 
@@ -1187,7 +1223,7 @@ def main():
                                     options=service_hours,
                                     index=start_hour_index,
                                     format_func=lambda x: f"{x:02d}",
-                                    key=f"start_hour_tab2_{selected_order_tab2}"
+                                    key=f"start_hour_tab2_{selected_display_tab2}"
                                 )
                             
                             with start_time_col2:
@@ -1196,7 +1232,7 @@ def main():
                                     options=list(range(0, 60, 1)),  # 1-minute intervals
                                     index=default_minute,  # Direct minute value
                                     format_func=lambda x: f"{x:02d}",
-                                    key=f"start_minute_tab2_{selected_order_tab2}"
+                                    key=f"start_minute_tab2_{selected_display_tab2}"
                                 )
                             
                             start_time = dt_time(start_hour, start_minute)
@@ -1218,7 +1254,7 @@ def main():
                                     options=service_hours,
                                     index=end_hour_index,
                                     format_func=lambda x: f"{x:02d}",
-                                    key=f"end_hour_tab2_{selected_order_tab2}"
+                                    key=f"end_hour_tab2_{selected_display_tab2}"
                                 )
                             
                             with end_time_col2:
@@ -1227,7 +1263,7 @@ def main():
                                     options=list(range(0, 60, 1)),  # 1-minute intervals
                                     index=default_minute,  # Direct minute value
                                     format_func=lambda x: f"{x:02d}",
-                                    key=f"end_minute_tab2_{selected_order_tab2}"
+                                    key=f"end_minute_tab2_{selected_display_tab2}"
                                 )
                             
                             end_time = dt_time(end_hour, end_minute)
