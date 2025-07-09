@@ -152,7 +152,7 @@ def setup_google_sheets():
         gc = gspread.authorize(credentials)
         return gc
     except Exception as e:
-        st.error(f"❌ Error conectando a Google Sheets: {str(e)}")
+        st.error(f"❌ Error conectando: {str(e)}")
         return None
 
 # ─────────────────────────────────────────────────────────────
@@ -254,7 +254,7 @@ def download_sheets_to_memory():
         return credentials_df, reservas_df, gestion_df
         
     except Exception as e:
-        st.error(f"Error descargando datos de Google Sheets: {str(e)}")
+        st.error(f"Error descargando datos: {str(e)}")
         return None, None, None
 
 def save_gestion_to_sheets(new_record):
@@ -370,7 +370,7 @@ def update_sheets_record(orden_compra, update_data):
         return True
         
     except Exception as e:
-        st.error(f"❌ Error actualizando registro en Google Sheets: {str(e)}")
+        st.error(f"❌ Error actualizando registro: {str(e)}")
         return False
 
 
@@ -863,12 +863,11 @@ def update_service_times(orden_compra, service_data):
 # ─────────────────────────────────────────────────────────────
 def main():
     st.title("🚚 Control de Proveedores")
-    st.caption("🔄 Migrado a Google Sheets")
     
     # Manual refresh button - rightmost position
     col1, col2 = st.columns([4, 1])
     with col2:
-        if st.button("🔄 Actualizar Datos", help="Descargar datos frescos desde Google Sheets"):
+        if st.button("🔄 Actualizar Datos", help="Descargar datos frescos"):
             download_sheets_to_memory.clear()
             st.success("✅ Datos actualizados!")
             st.rerun()
@@ -876,18 +875,16 @@ def main():
     st.markdown("---")
     
     # Load data
-    with st.spinner("Cargando datos desde Google Sheets..."):
+    with st.spinner("Cargando datos..."):
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
     
     if reservas_df is None:
-        st.error("No se pudo cargar los datos. Verifique la conexión a Google Sheets.")
+        st.error("No se pudo cargar los datos. Verifique la conexión.")
         if st.button("🔄 Reintentar Conexión"):
             download_sheets_to_memory.clear()
             st.rerun()
         return
     
-    # Show connection success
-    st.success(f"✅ Conectado a Google Sheets: {st.secrets['GOOGLE_SHEET_NAME']}")
     
     # Create tabs with enhanced styling
     tab1, tab2, tab3 = st.tabs(["🚚 REGISTRO DE LLEGADA", "⚙️ REGISTRO DE ATENCIÓN", "📊 DASHBOARD"])
@@ -1200,7 +1197,7 @@ def main():
                         }
                         
                         # Save to Google Sheets
-                        with st.spinner("Guardando llegada en Google Sheets..."):
+                        with st.spinner("Guardando llegada..."):
                             if save_arrival_to_sheets(arrival_data):
                                 st.success("✅ Llegada registrada exitosamente!")
                                 if tiempo_retraso > 0:
@@ -1385,7 +1382,7 @@ def main():
                                     }
                                     
                                     # Save to Google Sheets
-                                    with st.spinner("Guardando atención en Google Sheets..."):
+                                    with st.spinner("Guardando atención..."):
                                         if update_service_times(selected_order_tab2, service_data):
                                             st.success("✅ Atención registrada exitosamente!")
                                             
