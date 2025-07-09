@@ -9,6 +9,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, time as dt_time
+import pytz
+
+# Configure timezone for Bolivia
+BOLIVIA_TZ = pytz.timezone('America/La_Paz')
+
+def get_bolivia_now():
+    """Get current datetime in Bolivia timezone"""
+    return datetime.now(BOLIVIA_TZ)
+
+def get_bolivia_today():
+    """Get today's date in Bolivia timezone"""
+    return get_bolivia_now().date()
 
 # Configure page
 st.set_page_config(
@@ -379,7 +391,7 @@ def update_sheets_record(orden_compra, update_data):
 # ─────────────────────────────────────────────────────────────
 def get_today_reservations(reservas_df):
     """Get today's reservations"""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = get_bolivia_today().strftime('%Y-%m-%d')
     return reservas_df[reservas_df['Fecha'].astype(str).str.contains(today, na=False)]
 
 def parse_time_range(time_range_str):
@@ -484,7 +496,7 @@ def parse_datetime_flexible(datetime_str):
 # ─────────────────────────────────────────────────────────────
 def get_current_week():
     """Get current week number"""
-    return datetime.now().isocalendar()[1]
+    return get_bolivia_now().isocalendar()[1]
 
 def get_completed_weeks_data(gestion_df, weeks_back):
     """Get data for completed weeks only"""
@@ -700,7 +712,7 @@ def create_hourly_delay_chart(hourly_data):
 # ─────────────────────────────────────────────────────────────
 def get_existing_arrivals(gestion_df):
     """Get orders that already have arrival registered today but not yet completed"""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = get_bolivia_today().strftime('%Y-%m-%d')
     if gestion_df.empty:
         return []
 
@@ -726,7 +738,7 @@ def get_existing_arrivals(gestion_df):
 
 def get_completed_orders(gestion_df):
     """Get orders that have both arrival and service registered today"""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = get_bolivia_today().strftime('%Y-%m-%d')
     if gestion_df.empty:
         return []
     
@@ -1048,7 +1060,7 @@ def main():
                 if selected_order_tab1:
                     # Arrival time input with friendly UI
                     st.write("**Hora de Llegada:**")
-                    today_date = datetime.now().date()
+                    today_date = get_bolivia_today()
                     
                     # Get default time from booked hour in reservations
                     order_details = today_reservations[
@@ -1076,12 +1088,12 @@ def main():
                                 default_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
                             else:
                                 # If all parsing fails, use current time
-                                current_time = datetime.now()
+                                current_time = get_bolivia_now()
                                 default_hour = max(9, min(18, current_time.hour))
                                 default_minute = 0
                         except:
                             # Final fallback
-                            current_time = datetime.now()
+                            current_time = get_bolivia_now()
                             default_hour = max(9, min(18, current_time.hour))
                             default_minute = 0
                     
@@ -1134,7 +1146,7 @@ def main():
                             today_reservations['Orden_de_compra'] == selected_order_tab1
                         ].iloc[0]
                         
-                        arrival_datetime = combine_date_time(datetime.now().date(), arrival_time)
+                        arrival_datetime = combine_date_time(get_bolivia_today().date(), arrival_time)
                         
                         # Calculate delay and extract reservation hour - UNCHANGED LOGIC
                         tiempo_retraso = 0  # Default to 0 if can't calculate

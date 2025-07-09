@@ -21,3 +21,5 @@ requests>=2.28.0
 
 # Data Visualization - ADD THIS LINE
 plotly>=5.15.0
+
+pytz>=2023.3
