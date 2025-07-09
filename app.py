@@ -1163,7 +1163,7 @@ def main():
                             booked_start_time = parse_time_range(hora_str)
                         
                         if booked_start_time:
-                            booked_datetime = combine_date_time(datetime.now().date(), booked_start_time)
+                            booked_datetime = combine_date_time(get_bolivia_today(), booked_start_time)
                             calculated_delay = calculate_time_difference(booked_datetime, arrival_datetime)
                             if calculated_delay is not None:
                                 tiempo_retraso = calculated_delay
@@ -1180,7 +1180,7 @@ def main():
                                     
                                     # Create booked datetime manually
                                     booked_datetime = datetime.combine(
-                                        datetime.now().date(), 
+                                        get_bolivia_today(), 
                                         dt_time(booked_hour, booked_minute, booked_second)
                                     )
                                     
@@ -1366,7 +1366,7 @@ def main():
 
                             
                             if start_time and end_time:
-                                today_date = datetime.now().date()
+                                today_date = get_bolivia_today()
                                 hora_inicio = combine_date_time(today_date, start_time)
                                 hora_fin = combine_date_time(today_date, end_time)
                                 
