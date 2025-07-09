@@ -1146,7 +1146,7 @@ def main():
                             today_reservations['Orden_de_compra'] == selected_order_tab1
                         ].iloc[0]
                         
-                        arrival_datetime = combine_date_time(get_bolivia_today().date(), arrival_time)
+                        arrival_datetime = combine_date_time(get_bolivia_today(), arrival_time)
                         
                         # Calculate delay and extract reservation hour - UNCHANGED LOGIC
                         tiempo_retraso = 0  # Default to 0 if can't calculate
