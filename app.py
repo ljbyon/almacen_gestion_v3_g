@@ -303,7 +303,19 @@ def save_gestion_to_sheets(new_record):
         ]
         
         # Append the new record
-        gestion_ws.append_row(new_row_data, value_input_option='RAW')
+        #gestion_ws.append_row(new_row_data, value_input_option='RAW')
+
+        all_values = gestion_ws.get_all_values()
+        next_row = len(all_values) + 1
+        col_range = f'A{next_row}:L{next_row}'  # Note: L for 12 columns in gestion sheet
+
+        # Update specific row instead of append
+        gestion_ws.update(
+            range_name=col_range,
+            values=[new_row_data],
+            value_input_option='RAW'
+        )
+
         
         # Clear cache after successful save
         download_sheets_to_memory.clear()
