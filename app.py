@@ -252,7 +252,7 @@ def download_sheets_to_memory():
                     'Tiempo_espera', 'Tiempo_atencion', 'Tiempo_total', 'Tiempo_retraso',
                     'numero_de_semana', 'hora_de_reserva'
                 ]
-                gestion_ws.update(values=[headers], range_name='A1:L1')
+                gestion_ws.update('A1:L1', [headers])
                 gestion_df = pd.DataFrame(columns=headers)
             except Exception as e:
                 st.warning(f"No se pudo crear hoja de gestión: {e}")
@@ -374,7 +374,8 @@ def update_sheets_record(orden_compra, update_data):
         range_name = f"A{row_number}:L{row_number}"
         
         # Update the row
-        gestion_ws.update(values=[current_row], range_name=range_name, value_input_option='RAW')        
+        gestion_ws.update(range_name, [current_row], value_input_option='RAW')
+        
         # Clear cache after successful update
         download_sheets_to_memory.clear()
         
@@ -944,8 +945,7 @@ def main():
                     return datetime.strptime('23:59', '%H:%M').time()
             
             # Add a sort key column
-            #pending_reservations['sort_time'] = pending_reservations['Hora'].apply(extract_first_time)
-            pending_reservations.loc[:, 'sort_time'] = pending_reservations['Hora'].apply(extract_first_time)
+            pending_reservations['sort_time'] = pending_reservations['Hora'].apply(extract_first_time)
             
             # Sort by the time column ascending
             pending_reservations = pending_reservations.sort_values('sort_time')
