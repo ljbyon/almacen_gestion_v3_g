@@ -10,6 +10,22 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, time as dt_time
 import pytz
+import logging
+
+# ─────────────────────────────────────────────────────────────
+# LOGGING CONFIGURATION
+# ─────────────────────────────────────────────────────────────
+# Configure logging for Streamlit
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Create logger for this application
+logger = logging.getLogger('provider_control_app')
 
 # Configure timezone for Bolivia
 BOLIVIA_TZ = pytz.timezone('America/La_Paz')
@@ -149,66 +165,98 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────
-# 1. Google Sheets Configuration - MIGRATED FROM SHAREPOINT
+# 1. Google Sheets Configuration - WITH LOGGING
 # ─────────────────────────────────────────────────────────────
 @st.cache_resource
 def setup_google_sheets():
     """Configurar conexión a Google Sheets"""
+    logger.info("Starting Google Sheets connection setup")
     try:
         credentials_info = dict(st.secrets["google_service_account"])
+        logger.info("Successfully loaded Google service account credentials from secrets")
+        
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
+        
         credentials = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+        logger.info("Successfully created credentials with required scopes")
+        
         gc = gspread.authorize(credentials)
+        logger.info("Successfully authorized gspread client")
+        
         return gc
+    except KeyError as e:
+        logger.error(f"Missing required secret key: {str(e)}")
+        st.error(f"❌ Error: Missing configuration - {str(e)}")
+        return None
     except Exception as e:
+        logger.error(f"Error setting up Google Sheets connection: {str(e)}")
         st.error(f"❌ Error conectando: {str(e)}")
         return None
 
 # ─────────────────────────────────────────────────────────────
-# 2. Google Sheets Download Functions - MIGRATED FROM SHAREPOINT EXCEL
+# 2. Google Sheets Download Functions - WITH LOGGING
 # ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=60, show_spinner=False)  # Reduced TTL for real-time management
 def download_sheets_to_memory():
     """Download all sheets from Google Sheets - REPLACES SharePoint Excel download"""
+    logger.info("Starting data download from Google Sheets")
     try:
         gc = setup_google_sheets()
         if not gc:
+            logger.error("Failed to establish Google Sheets connection")
             return None, None, None
         
-        spreadsheet = gc.open(st.secrets["GOOGLE_SHEET_NAME"])
+        spreadsheet_name = st.secrets["GOOGLE_SHEET_NAME"]
+        logger.info(f"Attempting to open spreadsheet: {spreadsheet_name}")
+        
+        spreadsheet = gc.open(spreadsheet_name)
+        logger.info(f"Successfully opened spreadsheet: {spreadsheet_name}")
         
         # Load credentials sheet
+        logger.info("Loading credentials sheet...")
         try:
             credentials_ws = spreadsheet.worksheet("proveedor_credencial")
             credentials_data = credentials_ws.get_all_records()
+            logger.info(f"Retrieved {len(credentials_data)} credential records")
+            
             if credentials_data:
                 credentials_df = pd.DataFrame(credentials_data)
                 # Ensure all columns are strings for consistency
                 for col in credentials_df.columns:
                     credentials_df[col] = credentials_df[col].astype(str)
+                logger.info(f"Successfully processed credentials DataFrame with shape: {credentials_df.shape}")
             else:
+                logger.warning("No credential records found, using fallback method")
                 # Fallback to raw values
                 all_values = credentials_ws.get_all_values()
                 if all_values and len(all_values) > 1:
                     credentials_df = pd.DataFrame(all_values[1:], columns=all_values[0])
+                    logger.info(f"Fallback: created credentials DataFrame from raw values with shape: {credentials_df.shape}")
                 else:
                     credentials_df = pd.DataFrame(columns=['usuario', 'password', 'Email', 'cc'])
+                    logger.warning("No credential data found, created empty DataFrame")
         except gspread.WorksheetNotFound:
+            logger.warning("Credentials worksheet not found, creating empty DataFrame")
             credentials_df = pd.DataFrame(columns=['usuario', 'password', 'Email', 'cc'])
         
         # Load reservas sheet
+        logger.info("Loading reservas sheet...")
         try:
             reservas_ws = spreadsheet.worksheet("proveedor_reservas")
             reservas_data = reservas_ws.get_all_records()
+            logger.info(f"Retrieved {len(reservas_data)} reservation records")
+            
             if reservas_data:
                 reservas_df = pd.DataFrame(reservas_data)
                 # Ensure Orden_de_compra is string
                 if 'Orden_de_compra' in reservas_df.columns:
                     reservas_df['Orden_de_compra'] = reservas_df['Orden_de_compra'].astype(str)
+                logger.info(f"Successfully processed reservas DataFrame with shape: {reservas_df.shape}")
             else:
+                logger.warning("No reservation records found, using fallback method")
                 # Fallback to raw values
                 all_values = reservas_ws.get_all_values()
                 if all_values and len(all_values) > 1:
@@ -216,24 +264,31 @@ def download_sheets_to_memory():
                     # Ensure Orden_de_compra is string
                     if 'Orden_de_compra' in reservas_df.columns:
                         reservas_df['Orden_de_compra'] = reservas_df['Orden_de_compra'].astype(str)
+                    logger.info(f"Fallback: created reservas DataFrame from raw values with shape: {reservas_df.shape}")
                 else:
                     reservas_df = pd.DataFrame(columns=['Fecha', 'Hora', 'Proveedor', 'Numero_de_bultos', 'Orden_de_compra'])
+                    logger.warning("No reservation data found, created empty DataFrame")
         except gspread.WorksheetNotFound:
+            logger.warning("Reservas worksheet not found, creating empty DataFrame")
             reservas_df = pd.DataFrame(columns=['Fecha', 'Hora', 'Proveedor', 'Numero_de_bultos', 'Orden_de_compra'])
-            
-
 
         # Load or create gestion sheet
+        logger.info("Loading gestion sheet...")
         try:
             gestion_ws = spreadsheet.worksheet("proveedor_gestion")
             gestion_data = gestion_ws.get_all_records()
+            logger.info(f"Retrieved {len(gestion_data)} management records")
+            
             if gestion_data:
                 gestion_df = pd.DataFrame(gestion_data)
+                logger.info(f"Successfully processed gestion DataFrame with shape: {gestion_df.shape}")
             else:
+                logger.warning("No management records found, using fallback method")
                 # Fallback to raw values
                 all_values = gestion_ws.get_all_values()
                 if all_values and len(all_values) > 1:
                     gestion_df = pd.DataFrame(all_values[1:], columns=all_values[0])
+                    logger.info(f"Fallback: created gestion DataFrame from raw values with shape: {gestion_df.shape}")
                 else:
                     gestion_df = pd.DataFrame(columns=[
                         'Orden_de_compra', 'Proveedor', 'Numero_de_bultos',
@@ -241,10 +296,14 @@ def download_sheets_to_memory():
                         'Tiempo_espera', 'Tiempo_atencion', 'Tiempo_total', 'Tiempo_retraso',
                         'numero_de_semana', 'hora_de_reserva'
                     ])
+                    logger.warning("No management data found, created empty DataFrame")
         except gspread.WorksheetNotFound:
+            logger.warning("Gestion worksheet not found, attempting to create it")
             # Create gestion sheet if it doesn't exist
             try:
                 gestion_ws = spreadsheet.add_worksheet("proveedor_gestion", rows=200, cols=12)
+                logger.info("Successfully created new gestion worksheet")
+                
                 # Add headers
                 headers = [
                     'Orden_de_compra', 'Proveedor', 'Numero_de_bultos',
@@ -253,8 +312,11 @@ def download_sheets_to_memory():
                     'numero_de_semana', 'hora_de_reserva'
                 ]
                 gestion_ws.update(values=[headers], range_name='A1:L1')
+                logger.info("Successfully added headers to new gestion worksheet")
+                
                 gestion_df = pd.DataFrame(columns=headers)
             except Exception as e:
+                logger.error(f"Failed to create gestion worksheet: {str(e)}")
                 st.warning(f"No se pudo crear hoja de gestión: {e}")
                 gestion_df = pd.DataFrame(columns=[
                     'Orden_de_compra', 'Proveedor', 'Numero_de_bultos',
@@ -263,28 +325,39 @@ def download_sheets_to_memory():
                     'numero_de_semana', 'hora_de_reserva'
                 ])
         
+        logger.info(f"Data download complete. DataFrames - Credentials: {credentials_df.shape}, Reservas: {reservas_df.shape}, Gestion: {gestion_df.shape}")
         return credentials_df, reservas_df, gestion_df
         
     except Exception as e:
+        logger.error(f"Critical error during data download: {str(e)}")
         st.error(f"Error descargando datos: {str(e)}")
         return None, None, None
 
 def save_gestion_to_sheets(new_record):
-    """Save new management record to Google Sheets - REPLACES SharePoint Excel save"""
+    """Save new management record to Google Sheets - WITH LOGGING"""
+    logger.info(f"Starting save operation for new gestion record: {new_record.get('Orden_de_compra', 'UNKNOWN_ORDER')}")
+    
     try:
         # Load current data
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
         
         if reservas_df is None:
+            logger.error("Failed to load data for save operation")
             return False
+        
+        logger.info("Successfully loaded current data for save operation")
         
         # Get Google Sheets connection
         gc = setup_google_sheets()
         if not gc:
+            logger.error("Failed to establish Google Sheets connection for save")
             return False
         
-        spreadsheet = gc.open(st.secrets["GOOGLE_SHEET_NAME"])
+        spreadsheet_name = st.secrets["GOOGLE_SHEET_NAME"]
+        spreadsheet = gc.open(spreadsheet_name)
         gestion_ws = spreadsheet.worksheet("proveedor_gestion")
+        
+        logger.info(f"Successfully opened gestion worksheet for order: {new_record.get('Orden_de_compra')}")
         
         # Prepare new row data - MAINTAIN EXACT FORMAT
         new_row_data = [
@@ -302,56 +375,74 @@ def save_gestion_to_sheets(new_record):
             str(new_record.get('hora_de_reserva', ''))       # L: hora_de_reserva
         ]
         
-        # Append the new record
-        #gestion_ws.append_row(new_row_data, value_input_option='RAW')
-
+        logger.info(f"Prepared new row data for order {new_record.get('Orden_de_compra')}: columns={len(new_row_data)}")
+        
+        # Get current row count to determine next row
         all_values = gestion_ws.get_all_values()
         next_row = len(all_values) + 1
-        col_range = f'A{next_row}:L{next_row}'  # Note: L for 12 columns in gestion sheet
-
+        col_range = f'A{next_row}:L{next_row}'
+        
+        logger.info(f"Inserting new record at row {next_row} (range: {col_range})")
+        
         # Update specific row instead of append
         gestion_ws.update(
             range_name=col_range,
             values=[new_row_data],
             value_input_option='RAW'
         )
-
+        
+        logger.info(f"Successfully saved new gestion record for order: {new_record.get('Orden_de_compra')}")
         
         # Clear cache after successful save
         download_sheets_to_memory.clear()
+        logger.info("Cache cleared after successful save operation")
         
         return True
         
     except Exception as e:
+        logger.error(f"Error saving new gestion record for order {new_record.get('Orden_de_compra', 'UNKNOWN')}: {str(e)}")
         st.error(f"❌ Error guardando registro en Google Sheets: {str(e)}")
         return False
 
 def update_sheets_record(orden_compra, update_data):
-    """Update existing record in Google Sheets - REPLACES SharePoint Excel update"""
+    """Update existing record in Google Sheets - WITH LOGGING"""
+    logger.info(f"Starting update operation for order: {orden_compra}")
+    logger.info(f"Update data: {list(update_data.keys())}")
+    
     try:
         gc = setup_google_sheets()
         if not gc:
+            logger.error("Failed to establish Google Sheets connection for update")
             return False
         
-        spreadsheet = gc.open(st.secrets["GOOGLE_SHEET_NAME"])
+        spreadsheet_name = st.secrets["GOOGLE_SHEET_NAME"]
+        spreadsheet = gc.open(spreadsheet_name)
         gestion_ws = spreadsheet.worksheet("proveedor_gestion")
+        
+        logger.info(f"Successfully opened gestion worksheet for update of order: {orden_compra}")
         
         # Get all data
         all_values = gestion_ws.get_all_values()
+        logger.info(f"Retrieved {len(all_values)} total rows from gestion worksheet")
         
         # Find the row to update
         target_row_index = None
         for i, row in enumerate(all_values[1:], start=1):  # Skip header, start counting from 1
             if len(row) > 0 and str(row[0]).strip() == str(orden_compra).strip():
                 target_row_index = i
+                logger.info(f"Found target row at index {i} for order: {orden_compra}")
                 break
         
         if target_row_index is None:
+            logger.error(f"No matching record found for order: {orden_compra}")
+            available_orders = [str(row[0]).strip() for row in all_values[1:] if len(row) > 0]
+            logger.error(f"Available orders: {available_orders[:10]}...")  # Log first 10 to avoid spam
             st.error("No se encontró el registro para actualizar")
             return False
         
         # Get the current row data
         current_row = all_values[target_row_index].copy()
+        logger.info(f"Current row data length: {len(current_row)} columns")
         
         # Ensure row has enough columns (12 columns total)
         while len(current_row) < 12:
@@ -371,28 +462,44 @@ def update_sheets_record(orden_compra, update_data):
         }
         
         # Update the row data
+        updated_fields = []
         for field, value in update_data.items():
             if field in col_mapping:
                 col_index = col_mapping[field]
+                old_value = current_row[col_index] if col_index < len(current_row) else ''
                 
                 # Handle None values and ensure proper string conversion
                 if value is None or str(value).lower() in ['none', 'nan', '']:
                     current_row[col_index] = ''
+                    new_value = ''
                 else:
                     current_row[col_index] = str(value)
+                    new_value = str(value)
+                
+                updated_fields.append(f"{field}: '{old_value}' -> '{new_value}'")
+                logger.info(f"Updated field {field} at column {col_index}: '{old_value}' -> '{new_value}'")
+        
+        logger.info(f"Updated fields for order {orden_compra}: {updated_fields}")
         
         # Update the entire row (row numbers are 1-based for gspread)
         row_number = target_row_index + 1  # Convert to 1-based
         range_name = f"A{row_number}:L{row_number}"
         
+        logger.info(f"Updating row {row_number} (range: {range_name}) for order: {orden_compra}")
+        
         # Update the row
-        gestion_ws.update(values=[current_row], range_name=range_name, value_input_option='RAW')        
+        gestion_ws.update(values=[current_row], range_name=range_name, value_input_option='RAW')
+        
+        logger.info(f"Successfully updated record for order: {orden_compra}")
+        
         # Clear cache after successful update
         download_sheets_to_memory.clear()
+        logger.info("Cache cleared after successful update operation")
         
         return True
         
     except Exception as e:
+        logger.error(f"Error updating record for order {orden_compra}: {str(e)}")
         st.error(f"❌ Error actualizando registro: {str(e)}")
         return False
 
@@ -403,7 +510,9 @@ def update_sheets_record(orden_compra, update_data):
 def get_today_reservations(reservas_df):
     """Get today's reservations"""
     today = get_bolivia_today().strftime('%Y-%m-%d')
-    return reservas_df[reservas_df['Fecha'].astype(str).str.contains(today, na=False)]
+    today_reservations = reservas_df[reservas_df['Fecha'].astype(str).str.contains(today, na=False)]
+    logger.info(f"Found {len(today_reservations)} reservations for today ({today})")
+    return today_reservations
 
 def parse_time_range(time_range_str):
     """Parse time range string (e.g., '09:00-09:30' or '09:00 - 09:30') and return start time"""
@@ -719,23 +828,24 @@ def create_hourly_delay_chart(hourly_data):
     return fig
 
 # ─────────────────────────────────────────────────────────────
-# 5. Management Functions - UPDATED FOR GOOGLE SHEETS
+# 5. Management Functions - WITH LOGGING
 # ─────────────────────────────────────────────────────────────
 def get_existing_arrivals(gestion_df):
     """Get orders that already have arrival registered today but not yet completed"""
     today = get_bolivia_today().strftime('%Y-%m-%d')
     if gestion_df.empty:
+        logger.info("No gestion data available for existing arrivals check")
         return []
 
     if 'Orden_de_compra' in gestion_df.columns:
         gestion_df['Orden_de_compra'] = gestion_df['Orden_de_compra'].astype(str)
- 
-
     
     # Filter records with arrival time from today
     today_arrivals = gestion_df[
         gestion_df['Hora_llegada'].astype(str).str.contains(today, na=False)
     ]
+    
+    logger.info(f"Found {len(today_arrivals)} arrivals registered for today ({today})")
     
     # Only return orders that don't have service times completed
     pending_service = today_arrivals[
@@ -745,12 +855,16 @@ def get_existing_arrivals(gestion_df):
         (today_arrivals['Hora_fin_atencion'].astype(str).isin(['', 'nan', 'None']))
     ]
     
-    return sorted(pending_service['Orden_de_compra'].astype(str).tolist())
+    pending_orders = sorted(pending_service['Orden_de_compra'].astype(str).tolist())
+    logger.info(f"Found {len(pending_orders)} orders pending service: {pending_orders}")
+    
+    return pending_orders
 
 def get_completed_orders(gestion_df):
     """Get orders that have both arrival and service registered today"""
     today = get_bolivia_today().strftime('%Y-%m-%d')
     if gestion_df.empty:
+        logger.info("No gestion data available for completed orders check")
         return []
     
     # Filter records with arrival time from today
@@ -766,7 +880,10 @@ def get_completed_orders(gestion_df):
         (~today_records['Hora_fin_atencion'].astype(str).isin(['', 'nan', 'None']))
     ]
     
-    return completed['Orden_de_compra'].astype(str).tolist()
+    completed_orders = completed['Orden_de_compra'].astype(str).tolist()
+    logger.info(f"Found {len(completed_orders)} completed orders for today: {completed_orders}")
+    
+    return completed_orders
 
 def get_pending_arrivals(today_reservations, gestion_df):
     """Get orders that haven't registered arrival yet"""
@@ -775,17 +892,24 @@ def get_pending_arrivals(today_reservations, gestion_df):
     
     # Combine both lists to exclude from dropdown
     processed_orders = existing_arrivals + completed_orders
+    logger.info(f"Total processed orders (existing + completed): {len(processed_orders)}")
     
     # Return orders that haven't been processed at all
     pending = today_reservations[
         ~today_reservations['Orden_de_compra'].isin(processed_orders)
     ]
     
-    return sorted(pending['Orden_de_compra'].astype(str).tolist())
+    pending_orders = sorted(pending['Orden_de_compra'].astype(str).tolist())
+    logger.info(f"Found {len(pending_orders)} orders pending arrival: {pending_orders}")
+    
+    return pending_orders
 
 def get_arrival_record(gestion_df, orden_compra):
     """Get existing arrival record for an order"""
+    logger.info(f"Searching for arrival record for order: {orden_compra}")
+    
     if gestion_df.empty:
+        logger.warning("No gestion data available for arrival record search")
         return None
     
     # Ensure both sides are strings and strip whitespace
@@ -800,11 +924,15 @@ def get_arrival_record(gestion_df, orden_compra):
     if matching_records.empty:
         # Debug: show what we're looking for vs what exists
         available_orders = gestion_df['Orden_de_compra'].astype(str).str.strip().tolist()
+        logger.error(f"No arrival record found for order '{orden_compra_clean}'")
+        logger.error(f"Available orders in gestion: {available_orders[:10]}...")  # Log first 10 to avoid spam
         st.error(f"No se encontró orden '{orden_compra_clean}' en registros de gestión.")
         st.error(f"Órdenes disponibles: {available_orders}")
         return None
     
+    logger.info(f"Found arrival record for order: {orden_compra_clean}")
     return matching_records.iloc[0]
+
 def get_arrival_record_silent(gestion_df, orden_compra):
     """Get existing arrival record for an order - silent version without error messages"""
     if gestion_df.empty:
@@ -820,22 +948,29 @@ def get_arrival_record_silent(gestion_df, orden_compra):
     matching_records = gestion_df[mask]
     
     if matching_records.empty:
+        logger.info(f"No arrival record found for order '{orden_compra_clean}' (silent search)")
         return None
     
+    logger.info(f"Found arrival record for order '{orden_compra_clean}' (silent search)")
     return matching_records.iloc[0]
 
 def save_arrival_to_sheets(arrival_data):
-    """Save arrival data to Google Sheets - REPLACES SharePoint Excel save"""
+    """Save arrival data to Google Sheets - WITH LOGGING"""
+    orden_compra = arrival_data.get('Orden_de_compra', 'UNKNOWN')
+    logger.info(f"Starting arrival save operation for order: {orden_compra}")
+    
     try:
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
         
         if reservas_df is None:
+            logger.error("Failed to load data for arrival save operation")
             return False
         
         # Check if record already exists
         existing_record = get_arrival_record_silent(gestion_df, arrival_data['Orden_de_compra'])
         
         if existing_record is not None:
+            logger.info(f"Existing record found for order {orden_compra}, updating instead of creating new")
             # Update existing record
             update_data = {
                 'Hora_llegada': arrival_data['Hora_llegada'],
@@ -845,19 +980,25 @@ def save_arrival_to_sheets(arrival_data):
             }
             return update_sheets_record(arrival_data['Orden_de_compra'], update_data)
         else:
+            logger.info(f"No existing record found for order {orden_compra}, creating new record")
             # Add new record
             return save_gestion_to_sheets(arrival_data)
         
     except Exception as e:
+        logger.error(f"Error in arrival save operation for order {orden_compra}: {str(e)}")
         st.error(f"Error guardando llegada: {str(e)}")
         return False
 
 def update_service_times(orden_compra, service_data):
-    """Update service times for existing arrival record - UPDATED FOR GOOGLE SHEETS"""
+    """Update service times for existing arrival record - WITH LOGGING"""
+    logger.info(f"Starting service time update for order: {orden_compra}")
+    logger.info(f"Service data fields: {list(service_data.keys())}")
+    
     try:
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
         
         if gestion_df.empty:
+            logger.error("No data available in gestion sheet for service update")
             st.error("No hay datos en la hoja de gestión.")
             return False
         
@@ -869,28 +1010,43 @@ def update_service_times(orden_compra, service_data):
         matching_records = gestion_df[mask]
         
         if matching_records.empty:
-            st.error(f"No se encontró registro de llegada para la orden: '{orden_compra_clean}'")
+            logger.error(f"No matching record found for service update of order: {orden_compra_clean}")
             available_orders = gestion_df['Orden_de_compra'].astype(str).str.strip().tolist()
+            logger.error(f"Available orders: {available_orders[:10]}...")  # Log first 10
+            st.error(f"No se encontró registro de llegada para la orden: '{orden_compra_clean}'")
             st.error(f"Órdenes disponibles: {available_orders}")
             return False
         
+        logger.info(f"Found matching record for service update of order: {orden_compra_clean}")
+        
         # Update service times using Google Sheets update function
-        return update_sheets_record(orden_compra_clean, service_data)
+        result = update_sheets_record(orden_compra_clean, service_data)
+        
+        if result:
+            logger.info(f"Successfully updated service times for order: {orden_compra_clean}")
+        else:
+            logger.error(f"Failed to update service times for order: {orden_compra_clean}")
+        
+        return result
         
     except Exception as e:
+        logger.error(f"Error updating service times for order {orden_compra}: {str(e)}")
         st.error(f"Error actualizando tiempos de atención: {str(e)}")
         return False
 
 # ─────────────────────────────────────────────────────────────
-# 6. Main App - UPDATED FOR GOOGLE SHEETS
+# 6. Main App - WITH LOGGING
 # ─────────────────────────────────────────────────────────────
 def main():
+    logger.info("=== Provider Control App Starting ===")
+    
     st.title("🚚 Control de Proveedores")
     
     # Manual refresh button - rightmost position
     col1, col2 = st.columns([4, 1])
     with col2:
         if st.button("🔄 Actualizar Datos", help="Descargar datos frescos"):
+            logger.info("Manual data refresh requested by user")
             download_sheets_to_memory.clear()
             st.success("✅ Datos actualizados!")
             st.rerun()
@@ -899,15 +1055,19 @@ def main():
     
     # Load data
     with st.spinner("Cargando datos..."):
+        logger.info("Loading data from Google Sheets")
         credentials_df, reservas_df, gestion_df = download_sheets_to_memory()
     
     if reservas_df is None:
+        logger.error("Failed to load data, showing error to user")
         st.error("No se pudo cargar los datos. Verifique la conexión.")
         if st.button("🔄 Reintentar Conexión"):
+            logger.info("User requested connection retry")
             download_sheets_to_memory.clear()
             st.rerun()
         return
     
+    logger.info(f"Data loaded successfully. Shapes - Credentials: {credentials_df.shape}, Reservas: {reservas_df.shape}, Gestion: {gestion_df.shape}")
     
     # Create tabs with enhanced styling
     tab1, tab2, tab3 = st.tabs(["🚚 REGISTRO DE LLEGADA", "⚙️ REGISTRO DE ATENCIÓN", "📊 DASHBOARD"])
@@ -920,6 +1080,7 @@ def main():
     
     # Check if there are reservations for today (for tabs 1 and 2 only)
     no_reservations_today = today_reservations.empty
+    logger.info(f"Reservations for today: {'None' if no_reservations_today else len(today_reservations)}")
     
     # Get order status (only if there are reservations)
     if not no_reservations_today:
@@ -973,6 +1134,8 @@ def main():
                 display_text = f"{row['Proveedor']} - {row['Orden_de_compra']}"
                 pending_arrivals_display.append(display_text)
                 pending_arrivals_mapping[display_text] = row['Orden_de_compra']
+                
+            logger.info(f"Created {len(pending_arrivals_display)} pending arrival display options")
         else:
             pending_arrivals_display = []
             pending_arrivals_mapping = {}
@@ -1010,6 +1173,8 @@ def main():
                 display_text = f"{row['Proveedor']} - {row['Orden_de_compra']}"
                 existing_arrivals_display.append(display_text)
                 existing_arrivals_mapping[display_text] = row['Orden_de_compra']
+                
+            logger.info(f"Created {len(existing_arrivals_display)} existing arrival display options")
         else:
             existing_arrivals_display = []
             existing_arrivals_mapping = {}
@@ -1024,12 +1189,14 @@ def main():
         
     
     # ─────────────────────────────────────────────────────────────
-    # TAB 1: Arrival Registration - UPDATED FOR GOOGLE SHEETS
+    # TAB 1: Arrival Registration - WITH LOGGING
     # ─────────────────────────────────────────────────────────────
     with tab1:
+        logger.info("User accessed Arrival Registration tab")
         st.markdown("*Registre la hora de llegada del proveedor*")
         
         if no_reservations_today:
+            logger.info("No reservations today, showing warning message")
             st.warning("No hay reservas programadas para hoy.")
         else:
             col1, col2 = st.columns(2)
@@ -1037,10 +1204,12 @@ def main():
             with col1:
                 # Order selection - only show orders that haven't been processed
                 if not pending_arrivals_display:
+                    logger.info("No pending arrivals available")
                     st.info("✅ Todas las llegadas del día han sido registradas")
                     selected_order_tab1 = None
                     selected_display_tab1 = None
                 else:
+                    logger.info(f"Showing {len(pending_arrivals_display)} pending arrival options")
                     selected_display_tab1 = st.selectbox(
                         "Orden de Compra:",
                         options=pending_arrivals_display,
@@ -1050,6 +1219,7 @@ def main():
                 selected_order_tab1 = pending_arrivals_mapping.get(selected_display_tab1)
                 
                 if selected_order_tab1:
+                    logger.info(f"User selected order for arrival: {selected_order_tab1}")
                     # Get order details
                     order_details = today_reservations[
                         today_reservations['Orden_de_compra'] == selected_order_tab1
@@ -1081,6 +1251,8 @@ def main():
                     
                     # Parse the reserved time from the Hora column - UNCHANGED LOGIC
                     hora_str = str(order_details['Hora']).strip()
+                    logger.info(f"Parsing reservation time for order {selected_order_tab1}: '{hora_str}'")
+                    
                     booked_start_time = parse_combined_time_slots(hora_str)
                     if not booked_start_time:
                         booked_start_time = parse_single_time(hora_str)
@@ -1091,6 +1263,7 @@ def main():
                     if booked_start_time:
                         default_hour = booked_start_time.hour
                         default_minute = booked_start_time.minute
+                        logger.info(f"Parsed reservation time successfully: {default_hour:02d}:{default_minute:02d}")
                     else:
                         # Fallback: try to extract hour and minute manually
                         try:
@@ -1098,16 +1271,19 @@ def main():
                                 time_parts = hora_str.split(':')
                                 default_hour = int(time_parts[0])
                                 default_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+                                logger.info(f"Manual parsing successful: {default_hour:02d}:{default_minute:02d}")
                             else:
                                 # If all parsing fails, use current time
                                 current_time = get_bolivia_now()
                                 default_hour = max(9, min(18, current_time.hour))
                                 default_minute = 0
+                                logger.warning(f"Parsing failed, using current time fallback: {default_hour:02d}:{default_minute:02d}")
                         except:
                             # Final fallback
                             current_time = get_bolivia_now()
                             default_hour = max(9, min(18, current_time.hour))
                             default_minute = 0
+                            logger.warning(f"All parsing failed, using final fallback: {default_hour:02d}:{default_minute:02d}")
                     
                     # Ensure hour is within working range
                     default_hour = max(9, min(18, default_hour))
@@ -1143,6 +1319,7 @@ def main():
                     
                     # Combine into time object
                     arrival_time = dt_time(arrival_hour, arrival_minute)
+                    logger.info(f"Selected arrival time: {arrival_time}")
                     
                     st.info(f"Fecha: {today_date.strftime('%Y-%m-%d')}")
                 else:
@@ -1152,6 +1329,8 @@ def main():
             # Save arrival button - only show when order is selected
             if selected_order_tab1:
                 if st.button("Guardar Llegada", type="primary", key="save_arrival"):
+                    logger.info(f"User clicked save arrival button for order: {selected_order_tab1}")
+                    
                     if arrival_time:
                         # Get order details for delay calculation
                         order_details = today_reservations[
@@ -1159,6 +1338,7 @@ def main():
                         ].iloc[0]
                         
                         arrival_datetime = combine_date_time(get_bolivia_today(), arrival_time)
+                        logger.info(f"Processing arrival for order {selected_order_tab1} at {arrival_datetime}")
                         
                         # Calculate delay and extract reservation hour - UNCHANGED LOGIC
                         tiempo_retraso = 0  # Default to 0 if can't calculate
@@ -1181,6 +1361,7 @@ def main():
                                 tiempo_retraso = calculated_delay
                             # Extract hour for hora_de_reserva (e.g., 10 for "10:00:00")
                             hora_de_reserva = booked_start_time.hour
+                            logger.info(f"Delay calculation successful: {tiempo_retraso} minutes, reservation hour: {hora_de_reserva}")
                         else:
                             # Fallback: manual calculation for formats like "10:00:00"
                             try:
@@ -1199,10 +1380,12 @@ def main():
                                     # Calculate delay manually
                                     tiempo_retraso = calculate_time_difference(booked_datetime, arrival_datetime)
                                     hora_de_reserva = booked_hour
-                            except Exception:
+                                    logger.info(f"Manual delay calculation successful: {tiempo_retraso} minutes, reservation hour: {hora_de_reserva}")
+                            except Exception as e:
                                 # If all else fails, set to defaults
                                 hora_de_reserva = None
                                 tiempo_retraso = 0
+                                logger.warning(f"Delay calculation failed, using defaults: {str(e)}")
                         
                         # Prepare arrival data - MAINTAIN EXACT DATE FORMAT
                         arrival_data = {
@@ -1220,9 +1403,13 @@ def main():
                             'hora_de_reserva': hora_de_reserva
                         }
                         
+                        logger.info(f"Prepared arrival data: {arrival_data}")
+                        
                         # Save to Google Sheets
                         with st.spinner("Guardando llegada..."):
+                            logger.info(f"Attempting to save arrival data for order: {selected_order_tab1}")
                             if save_arrival_to_sheets(arrival_data):
+                                logger.info(f"Successfully saved arrival for order: {selected_order_tab1}")
                                 st.success("✅ Llegada registrada exitosamente!")
                                 if tiempo_retraso > 0:
                                     st.warning(f"⏰ Retraso: {tiempo_retraso} minutos")
@@ -1236,21 +1423,26 @@ def main():
                                     time.sleep(5)
                                 st.rerun()
                             else:
+                                logger.error(f"Failed to save arrival for order: {selected_order_tab1}")
                                 st.error("Error al guardar la llegada. Intente nuevamente.")
                     else:
+                        logger.warning("User attempted to save arrival without completing required fields")
                         st.error("Por favor complete todos los campos.")
     
     # ─────────────────────────────────────────────────────────────
-    # TAB 2: Service Registration - UPDATED FOR GOOGLE SHEETS
+    # TAB 2: Service Registration - WITH LOGGING
     # ─────────────────────────────────────────────────────────────
     with tab2:
+        logger.info("User accessed Service Registration tab")
         st.markdown("*Registre los tiempos de inicio y fin de atención*")
         
         if no_reservations_today:
+            logger.info("No reservations today, showing warning in service tab")
             st.warning("No hay reservas programadas para hoy.")
         else:
             # Order selection
             if existing_arrivals_display:
+                logger.info(f"Showing {len(existing_arrivals_display)} existing arrival options for service")
                 selected_display_tab2 = st.selectbox(
                     "Orden de Compra:",
                     options=existing_arrivals_display,
@@ -1259,6 +1451,7 @@ def main():
                 # Get the actual orden_de_compra from the mapping
                 selected_order_tab2 = existing_arrivals_mapping.get(selected_display_tab2)
             else:
+                logger.info("No existing arrivals available for service registration")
                 selected_display_tab2 = st.selectbox(
                     "Orden de Compra:",
                     options=["No hay llegadas registradas"],
@@ -1267,7 +1460,8 @@ def main():
                 )
                 selected_order_tab2 = None
             
-            if existing_arrivals_display  and selected_order_tab2:
+            if existing_arrivals_display and selected_order_tab2:
+                logger.info(f"User selected order for service: {selected_order_tab2}")
                 # Get arrival record
                 arrival_record = get_arrival_record(gestion_df, selected_order_tab2)
                 
@@ -1291,6 +1485,7 @@ def main():
                     )
                     
                     if service_registered:
+                        logger.info(f"Service already registered for order: {selected_order_tab2}")
                         st.success("✅ Atención ya registrada")
                         # Show existing times
                         col1, col2 = st.columns(2)
@@ -1300,6 +1495,7 @@ def main():
                         with col2:
                             st.metric("Tiempo Total", f"{arrival_record['Tiempo_total']} min")
                     else:
+                        logger.info(f"Service not yet registered for order: {selected_order_tab2}")
                         st.warning("⏳ Pendiente de registrar atención")
                         
                         # Service time inputs - only show when not registered
@@ -1310,6 +1506,8 @@ def main():
                         # Ensure default hour is within service hours (9-18)
                         default_hour = max(9, min(18, arrival_datetime.hour))
                         default_minute = arrival_datetime.minute  # Use exact minute instead of rounding
+                        
+                        logger.info(f"Setting default service times based on arrival: {default_hour:02d}:{default_minute:02d}")
                         
                         with col1:
                             st.write("**Hora de Inicio de Atención:**")
@@ -1375,7 +1573,8 @@ def main():
                         
                         # Save service times button - only show when not registered
                         if st.button("Guardar Atención", type="primary", key="save_service"):
-
+                            logger.info(f"User clicked save service button for order: {selected_order_tab2}")
+                            logger.info(f"Service times - Start: {start_time}, End: {end_time}")
                             
                             if start_time and end_time:
                                 today_date = get_bolivia_today()
@@ -1387,14 +1586,18 @@ def main():
                                 
                                 # Validate times - UNCHANGED LOGIC
                                 if hora_inicio >= hora_fin:
+                                    logger.warning(f"Invalid service times for order {selected_order_tab2}: start >= end")
                                     st.error("La hora de fin debe ser posterior a la hora de inicio.")
                                 elif hora_inicio < arrival_datetime:
+                                    logger.warning(f"Invalid service times for order {selected_order_tab2}: start before arrival")
                                     st.error("La hora de inicio de atención no puede ser anterior a la hora de llegada.")
                                 else:
                                     # Calculate times - UNCHANGED LOGIC
                                     tiempo_espera = calculate_time_difference(arrival_datetime, hora_inicio)
                                     tiempo_atencion = calculate_time_difference(hora_inicio, hora_fin)
                                     tiempo_total = calculate_time_difference(arrival_datetime, hora_fin)
+                                    
+                                    logger.info(f"Calculated service metrics for order {selected_order_tab2} - Espera: {tiempo_espera}, Atencion: {tiempo_atencion}, Total: {tiempo_total}")
                                     
                                     # Prepare service data - MAINTAIN EXACT DATE FORMAT
                                     service_data = {
@@ -1405,9 +1608,13 @@ def main():
                                         'Tiempo_total': tiempo_total
                                     }
                                     
+                                    logger.info(f"Prepared service data: {service_data}")
+                                    
                                     # Save to Google Sheets
                                     with st.spinner("Guardando atención..."):
+                                        logger.info(f"Attempting to save service data for order: {selected_order_tab2}")
                                         if update_service_times(selected_order_tab2, service_data):
+                                            logger.info(f"Successfully saved service times for order: {selected_order_tab2}")
                                             st.success("✅ Atención registrada exitosamente!")
                                             
                                             # Calculate delay for summary - UNCHANGED LOGIC
@@ -1454,6 +1661,8 @@ def main():
                                                         # Keep default value of 0
                                                         pass
                                             
+                                            logger.info(f"Display delay for order {selected_order_tab2}: {tiempo_retraso_display} minutes")
+                                            
                                             # Show summary
                                             col1, col2 = st.columns(2)
                                             with col1:
@@ -1474,23 +1683,28 @@ def main():
                                                 time.sleep(10)
                                             st.rerun()
                                         else:
+                                            logger.error(f"Failed to save service times for order: {selected_order_tab2}")
                                             st.error("Error al guardar la atención. Intente nuevamente.")
                             else:
+                                logger.warning("User attempted to save service times without completing required fields")
                                 st.error("Por favor complete todos los campos de tiempo.")
             else:
+                logger.info("No arrivals available for service registration")
                 st.markdown(
                     '<div class="service-info">⚠️ No hay llegadas registradas hoy. Primero debe registrar la llegada en la pestaña anterior.</div>', 
                     unsafe_allow_html=True
                 )
     
     # ─────────────────────────────────────────────────────────────
-    # TAB 3: Dashboard - UNCHANGED LOGIC
+    # TAB 3: Dashboard - WITH BASIC LOGGING
     # ─────────────────────────────────────────────────────────────
     with tab3:
+        logger.info("User accessed Dashboard tab")
         st.markdown("*Análisis y tendencias de rendimiento de proveedores*")
         
         # Check if we have data
         if gestion_df.empty:
+            logger.info("No data available for dashboard")
             st.warning("📊 No hay datos disponibles para mostrar gráficos.")
             return
         
@@ -1524,6 +1738,8 @@ def main():
             )
             selected_weeks = week_options[selected_weeks_label]
         
+        logger.info(f"Dashboard filters - Provider: {selected_provider}, Weeks: {selected_weeks}")
+        
         st.markdown("---")
         
         # Get filtered data
@@ -1534,9 +1750,11 @@ def main():
         if selected_provider != "Todos":
             stats_data_count = stats_data_count[stats_data_count['Proveedor'] == selected_provider]
         st.caption(f"📊 Mostrando {len(stats_data_count)} registros para el análisis")
+        logger.info(f"Dashboard showing {len(stats_data_count)} records for analysis")
 
         
         if filtered_data.empty:
+            logger.info(f"No completed data available for last {selected_weeks} weeks")
             st.warning(f"📊 No hay datos completos para las últimas {selected_weeks} semanas.")
             return
         
@@ -1581,6 +1799,7 @@ def main():
             fig1 = create_weekly_times_chart(weekly_data)
             if fig1:
                 st.plotly_chart(fig1, use_container_width=True)
+                logger.info("Displayed weekly times chart")
         else:
             st.info("No hay datos para el proveedor seleccionado en el período especificado.")
         
@@ -1593,6 +1812,7 @@ def main():
             fig2 = create_weekly_delay_chart(weekly_data)
             if fig2:
                 st.plotly_chart(fig2, use_container_width=True)
+                logger.info("Displayed weekly delay chart")
         else:
             st.info("No hay datos para el proveedor seleccionado en el período especificado.")
         
@@ -1606,6 +1826,7 @@ def main():
             fig3 = create_hourly_times_chart(hourly_data)
             if fig3:
                 st.plotly_chart(fig3, use_container_width=True)
+                logger.info("Displayed hourly times chart")
         else:
             if selected_provider != "Todos":
                 st.info(f"No hay datos de horas de reserva para el proveedor {selected_provider} en el período especificado.")
@@ -1621,11 +1842,14 @@ def main():
             fig4 = create_hourly_delay_chart(hourly_data)
             if fig4:
                 st.plotly_chart(fig4, use_container_width=True)
+                logger.info("Displayed hourly delay chart")
         else:
             if selected_provider != "Todos":
                 st.info(f"No hay datos de horas de reserva para el proveedor {selected_provider} en el período especificado.")
             else:
                 st.info("No hay datos de horas de reserva para el período especificado.")
+    
+    logger.info("=== Provider Control App Session Complete ===")
 
 if __name__ == "__main__":
     main()
