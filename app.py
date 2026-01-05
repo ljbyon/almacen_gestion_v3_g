@@ -618,21 +618,59 @@ def get_current_week():
     """Get current week number"""
     return get_bolivia_now().isocalendar()[1]
 
+# def get_completed_weeks_data(gestion_df, weeks_back):
+#     """Get data for completed weeks only"""
+#     if gestion_df.empty:
+#         return pd.DataFrame()
+    
+#     current_week = get_current_week()
+#     # Get weeks that are fully completed (exclude current week)
+#     target_weeks = [current_week - i for i in range(1, weeks_back + 1)]
+    
+#     # Filter data for target weeks
+#     filtered_df = gestion_df[
+#         (gestion_df['numero_de_semana'].astype(str).str.isdigit()) &
+#         (pd.to_numeric(gestion_df['numero_de_semana'], errors='coerce').isin(target_weeks)) &
+#         (gestion_df['Tiempo_total'].notna())  # Only completed records
+#     ].copy()
+    
+#     return filtered_df
+
 def get_completed_weeks_data(gestion_df, weeks_back):
     """Get data for completed weeks only"""
     if gestion_df.empty:
         return pd.DataFrame()
     
-    current_week = get_current_week()
-    # Get weeks that are fully completed (exclude current week)
-    target_weeks = [current_week - i for i in range(1, weeks_back + 1)]
+    # Get current datetime and calculate cutoff date
+    current_date = get_bolivia_now()
+    # Go back to start of current week (Monday)
+    current_week_start = current_date - timedelta(days=current_date.weekday())
+    # Calculate cutoff: start of current week minus weeks_back
+    cutoff_date = current_week_start - timedelta(weeks=weeks_back)
     
-    # Filter data for target weeks
+    # Filter records that have completion times and are within date range
     filtered_df = gestion_df[
-        (gestion_df['numero_de_semana'].astype(str).str.isdigit()) &
-        (pd.to_numeric(gestion_df['numero_de_semana'], errors='coerce').isin(target_weeks)) &
-        (gestion_df['Tiempo_total'].notna())  # Only completed records
+        (gestion_df['Tiempo_total'].notna()) &  # Only completed records
+        (gestion_df['Hora_llegada'].notna())
     ].copy()
+    
+    # Parse arrival dates and filter by date range
+    def parse_arrival_date(datetime_str):
+        """Parse arrival datetime and return date"""
+        dt = parse_datetime_flexible(datetime_str)
+        return dt.date() if dt else None
+    
+    filtered_df['arrival_date'] = filtered_df['Hora_llegada'].apply(parse_arrival_date)
+    
+    # Filter by date range: from cutoff_date up to (but not including) current week
+    filtered_df = filtered_df[
+        (filtered_df['arrival_date'].notna()) &
+        (filtered_df['arrival_date'] >= cutoff_date.date()) &
+        (filtered_df['arrival_date'] < current_week_start.date())
+    ]
+    
+    # Remove temporary column
+    filtered_df = filtered_df.drop('arrival_date', axis=1)
     
     return filtered_df
 
