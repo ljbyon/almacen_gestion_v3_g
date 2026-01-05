@@ -618,23 +618,8 @@ def get_current_week():
     """Get current week number"""
     return get_bolivia_now().isocalendar()[1]
 
-# def get_completed_weeks_data(gestion_df, weeks_back):
-#     """Get data for completed weeks only"""
-#     if gestion_df.empty:
-#         return pd.DataFrame()
-    
-#     current_week = get_current_week()
-#     # Get weeks that are fully completed (exclude current week)
-#     target_weeks = [current_week - i for i in range(1, weeks_back + 1)]
-    
-#     # Filter data for target weeks
-#     filtered_df = gestion_df[
-#         (gestion_df['numero_de_semana'].astype(str).str.isdigit()) &
-#         (pd.to_numeric(gestion_df['numero_de_semana'], errors='coerce').isin(target_weeks)) &
-#         (gestion_df['Tiempo_total'].notna())  # Only completed records
-#     ].copy()
-    
-#     return filtered_df
+
+
 
 def get_completed_weeks_data(gestion_df, weeks_back):
     """Get data for completed weeks only"""
@@ -674,6 +659,14 @@ def get_completed_weeks_data(gestion_df, weeks_back):
     
     return filtered_df
 
+
+
+
+
+
+
+
+
 def aggregate_by_week(df, provider_filter=None):
     """Aggregate data by week"""
     if df.empty:
@@ -683,19 +676,44 @@ def aggregate_by_week(df, provider_filter=None):
     if provider_filter and provider_filter != "Todos":
         df = df[df['Proveedor'] == provider_filter]
     
+    if df.empty:
+        return pd.DataFrame()
+    
     # Convert numeric columns
     for col in ['Tiempo_espera', 'Tiempo_atencion', 'Tiempo_total', 'Tiempo_retraso']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
+    # Parse arrival dates and create week identifiers
+    def get_week_label(datetime_str):
+        """Get week label from datetime string (YYYY-WW format)"""
+        dt = parse_datetime_flexible(datetime_str)
+        if dt:
+            year, week, _ = dt.isocalendar()
+            return f"{year}-W{week:02d}"
+        return None
+    
+    df = df.copy()
+    df['week_label'] = df['Hora_llegada'].apply(get_week_label)
+    
+    # Filter out rows without valid week labels
+    df = df[df['week_label'].notna()]
+    
+    if df.empty:
+        return pd.DataFrame()
+    
     # Aggregate by week
-    weekly_data = df.groupby('numero_de_semana').agg({
+    weekly_data = df.groupby('week_label').agg({
         'Tiempo_espera': 'mean',
         'Tiempo_atencion': 'mean', 
         'Tiempo_total': 'mean',
         'Tiempo_retraso': 'mean'
     }).round(1).reset_index()
     
+    # Sort by week label to ensure proper chronological order
+    weekly_data = weekly_data.sort_values('week_label')
+    
     return weekly_data
+    
 
 def aggregate_by_hour_from_filtered(filtered_df, provider_filter=None):
     """Aggregate data by reservation hour from already filtered data"""
@@ -729,6 +747,8 @@ def aggregate_by_hour_from_filtered(filtered_df, provider_filter=None):
     
     return hourly_data
 
+
+
 def create_weekly_times_chart(weekly_data):
     """Create chart for weekly time metrics"""
     if weekly_data.empty:
@@ -737,7 +757,7 @@ def create_weekly_times_chart(weekly_data):
     fig = go.Figure()
     
     fig.add_trace(go.Scatter(
-        x=weekly_data['numero_de_semana'],
+        x=weekly_data['week_label'],
         y=weekly_data['Tiempo_espera'],
         mode='lines+markers',
         name='Tiempo de Espera',
@@ -745,7 +765,7 @@ def create_weekly_times_chart(weekly_data):
     ))
     
     fig.add_trace(go.Scatter(
-        x=weekly_data['numero_de_semana'],
+        x=weekly_data['week_label'],
         y=weekly_data['Tiempo_atencion'],
         mode='lines+markers', 
         name='Tiempo de Atención',
@@ -753,7 +773,7 @@ def create_weekly_times_chart(weekly_data):
     ))
     
     fig.add_trace(go.Scatter(
-        x=weekly_data['numero_de_semana'],
+        x=weekly_data['week_label'],
         y=weekly_data['Tiempo_total'],
         mode='lines+markers',
         name='Tiempo Total', 
@@ -762,15 +782,16 @@ def create_weekly_times_chart(weekly_data):
     
     fig.update_layout(
         title='Tiempos Promedio por Semana',
-        xaxis_title='Número de Semana',
+        xaxis_title='Semana (Año-Semana)',
         yaxis_title='Tiempo (minutos)',
         hovermode='x unified'
     )
     
-    # Set x-axis tick interval to 1
-    fig.update_xaxes(dtick=1)
-    
     return fig
+
+
+
+
 
 def create_weekly_delay_chart(weekly_data):
     """Create chart for weekly delay metrics"""
@@ -780,7 +801,7 @@ def create_weekly_delay_chart(weekly_data):
     fig = go.Figure()
     
     fig.add_trace(go.Scatter(
-        x=weekly_data['numero_de_semana'],
+        x=weekly_data['week_label'],
         y=weekly_data['Tiempo_retraso'],
         mode='lines+markers',
         name='Tiempo de Retraso',
@@ -792,10 +813,9 @@ def create_weekly_delay_chart(weekly_data):
     
     fig.update_layout(
         title='Tiempo de Retraso Promedio por Semana',
-        xaxis_title='Número de Semana',
+        xaxis_title='Semana (Año-Semana)',
         yaxis_title='Tiempo (minutos)',
-        hovermode='x unified',
-        xaxis=dict(dtick=1)
+        hovermode='x unified'
     )
     
     return fig
